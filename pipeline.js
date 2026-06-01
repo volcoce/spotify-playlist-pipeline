@@ -370,10 +370,11 @@ async function main() {
 
   console.log(`\n📋 Fetching playlist: ${playlistId}`);
   const playlistInfo = await spotifyRequest("get",
-    `https://api.spotify.com/v1/playlists/${playlistId}?fields=name,tracks.total`
+    `https://api.spotify.com/v1/playlists/${playlistId}`
   );
+  const totalTracks  = playlistInfo.tracks?.total ?? playlistInfo.items?.total ?? "?";
   const playlistName = NEW_PLAYLIST_NAME || `${playlistInfo.name} [Sorted]`;
-  console.log(`✓ "${playlistInfo.name}" — ${playlistInfo.tracks.total} tracks`);
+  console.log(`✓ "${playlistInfo.name}" — ${totalTracks} tracks`);
 
   console.log("⬇️  Fetching tracks...");
   const rawTracks = await fetchAllTracks(playlistId);
