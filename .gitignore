@@ -2,3 +2,4 @@ node_modules/
 *.csv
 .env
 !.env.example
+.spotify_tokens.json
