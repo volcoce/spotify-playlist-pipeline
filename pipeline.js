@@ -8,7 +8,7 @@ import "dotenv/config";
 // ─── CONFIG — edit .env file, not here ────────────────────────────────────────
 const CLIENT_ID     = process.env.SPOTIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
-const REDIRECT_URI  = "http://localhost:8888/callback";
+const REDIRECT_URI  = "http://127.0.0.1:8888/callback";
 const PORT          = 8888;
 const SCOPES        = "playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private";
 
