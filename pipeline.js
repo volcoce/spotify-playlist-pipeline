@@ -238,6 +238,18 @@ async function fetchAllTracks(playlistId) {
   return tracks;
 }
 
+async function fetchFullTracks(trackIds) {
+  const full = [];
+  for (let i = 0; i < trackIds.length; i += 50) {
+    const chunk = trackIds.slice(i, i + 50);
+    const res = await spotifyRequest("get",
+      `https://api.spotify.com/v1/tracks?ids=${chunk.join(",")}`
+    );
+    full.push(...(res.tracks || []));
+  }
+  return full;
+}
+
 async function fetchAudioFeatures(trackIds) {
   const features = [];
   for (let i = 0; i < trackIds.length; i += 100) {
@@ -385,6 +397,11 @@ async function main() {
 
   const ids = rawTracks.map(t => t.track.id);
 
+  console.log("📦 Fetching full track details (popularity, etc.)...");
+  const fullTracks = await fetchFullTracks(ids);
+  const fullMap = Object.fromEntries(fullTracks.filter(Boolean).map(t => [t.id, t]));
+  console.log("✓ Full track details loaded");
+
   console.log("🎼 Fetching audio features...");
   const features = await fetchAudioFeatures(ids);
   const audioFeaturesAvailable = features.some(f => f !== null);
@@ -408,8 +425,9 @@ async function main() {
 
   const tracks = rawTracks.map((item, i) => {
     const t = item.track;
-    const f = features[i] || {};
-    const a = analyses[i] || nullAnalysis;
+    const f  = features[i] || {};
+    const a  = analyses[i] || nullAnalysis;
+    const ft = fullMap[t.id] || t;
     const camelot    = getCamelot(f.key ?? -1, f.mode ?? -1);
     const [cn, ct]   = parseCamelot(camelot);
     const camelotKey = CAMELOT_TO_KEY[camelot] || "?";
@@ -448,8 +466,8 @@ async function main() {
       speech:       f.speechiness      != null ? Math.round(f.speechiness      * 100) : "",
       live:         f.liveness         != null ? Math.round(f.liveness         * 100) : "",
       loud:         f.loudness         != null ? f.loudness.toFixed(1) : "",
-      popularity:   t.popularity,
-      explicit:     t.explicit ? "Yes" : "No",
+      popularity:   ft.popularity ?? t.popularity ?? "",
+      explicit:     (ft.explicit ?? t.explicit) ? "Yes" : "No",
       spotifyId:    t.id,
       isrc:         t.external_ids?.isrc || "",
       addedAt:      item.added_at?.split("T")[0] || "",
