@@ -17,8 +17,10 @@ const SORT_MODE           = process.env.SORT_MODE || "listen";
 const NEW_PLAYLIST_NAME   = process.env.NEW_PLAYLIST_NAME || "";
 const NEW_PLAYLIST_PUBLIC = process.env.NEW_PLAYLIST_PUBLIC === "true";
 
-if (!CLIENT_ID || !CLIENT_SECRET) {
-  console.error("❌ Missing SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET in .env");
+const STATIC_TOKEN = process.env.SPOTIFY_TOKEN || null;
+
+if (!STATIC_TOKEN && (!CLIENT_ID || !CLIENT_SECRET)) {
+  console.error("❌ Set SPOTIFY_TOKEN or both SPOTIFY_CLIENT_ID + SPOTIFY_CLIENT_SECRET in .env");
   process.exit(1);
 }
 if (!SOURCE_PLAYLIST) {
@@ -52,7 +54,7 @@ const KEY_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 const MODE_NAMES = { 0: "Minor", 1: "Major" };
 
 const app = express();
-let accessToken = null;
+let accessToken = STATIC_TOKEN;
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 function getAuthURL() {
@@ -351,24 +353,32 @@ async function run() {
 }
 
 // ─── EXPRESS ──────────────────────────────────────────────────────────────────
-app.get("/callback", async (req, res) => {
-  const { code, error } = req.query;
-  if (error) { res.send(`❌ ${error}`); process.exit(1); }
-  try {
-    accessToken = await getAccessToken(code);
-    res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:2rem">
-      <h2>✅ Authenticated!</h2><p>Check your terminal.</p></body></html>`);
-    await run();
-  } catch (err) {
-    console.error("❌", err.response?.data || err.message);
-    process.exit(1);
-  }
-});
-
-app.listen(PORT, () => {
+if (STATIC_TOKEN) {
   console.log("\n🎧 Spotify Pipeline — fetch → sort → create");
   console.log("────────────────────────────────────────────");
   console.log("Sort mode:", SORT_MODES[SORT_MODE].label);
-  console.log("Opening Spotify login...");
-  open(getAuthURL());
-});
+  console.log("Using token from SPOTIFY_TOKEN...");
+  run().catch(err => { console.error("❌", err.response?.data || err.message); process.exit(1); });
+} else {
+  app.get("/callback", async (req, res) => {
+    const { code, error } = req.query;
+    if (error) { res.send(`❌ ${error}`); process.exit(1); }
+    try {
+      accessToken = await getAccessToken(code);
+      res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:2rem">
+        <h2>✅ Authenticated!</h2><p>Check your terminal.</p></body></html>`);
+      await run();
+    } catch (err) {
+      console.error("❌", err.response?.data || err.message);
+      process.exit(1);
+    }
+  });
+
+  app.listen(PORT, () => {
+    console.log("\n🎧 Spotify Pipeline — fetch → sort → create");
+    console.log("────────────────────────────────────────────");
+    console.log("Sort mode:", SORT_MODES[SORT_MODE].label);
+    console.log("Opening Spotify login...");
+    open(getAuthURL());
+  });
+}
