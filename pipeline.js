@@ -119,11 +119,14 @@ function doOAuthFlow() {
     const codeVerifier  = generateCodeVerifier();
     const codeChallenge = generateCodeChallenge(codeVerifier);
 
+    const state = crypto.randomBytes(16).toString("hex");
+
     const authURL = `https://accounts.spotify.com/authorize?${new URLSearchParams({
       client_id:             CLIENT_ID,
       response_type:         "code",
       redirect_uri:          REDIRECT_URI,
       scope:                 SCOPES,
+      state,
       code_challenge_method: "S256",
       code_challenge:        codeChallenge,
     })}`;
@@ -144,7 +147,13 @@ function doOAuthFlow() {
     });
 
     app.get("/callback", async (req, res) => {
-      const { code, error } = req.query;
+      const { code, error, state: returnedState } = req.query;
+      if (returnedState !== state) {
+        res.send(`<html><body style="font-family:sans-serif;padding:2rem"><h2>❌ State mismatch</h2><p>Possible CSRF attack. Try again.</p></body></html>`);
+        server.close();
+        reject(new Error("OAuth state mismatch"));
+        return;
+      }
       if (error) {
         res.send(`<html><body style="font-family:sans-serif;padding:2rem"><h2>❌ ${error}</h2><p>Check your terminal.</p></body></html>`);
         server.close();
@@ -217,7 +226,7 @@ function extractPlaylistId(input) {
 }
 
 async function fetchAllTracks(playlistId) {
-  let tracks = [], url = `https://api.spotify.com/v1/playlists/${playlistId}/items?limit=100`;
+  let tracks = [], url = `https://api.spotify.com/v1/playlists/${playlistId}/items?limit=50`;
   while (url) {
     const res = await spotifyRequest("get", url);
     tracks = tracks.concat(res.items.filter(i => i.track?.id));
@@ -283,13 +292,9 @@ async function fetchAllAudioAnalysis(trackIds) {
   return results;
 }
 
-async function getMe() {
-  return spotifyRequest("get", "https://api.spotify.com/v1/me");
-}
-
-async function createPlaylist(userId, name, isPublic) {
+async function createPlaylist(name, isPublic) {
   const res = await spotifyRequest("post",
-    `https://api.spotify.com/v1/users/${userId}/playlists`,
+    `https://api.spotify.com/v1/me/playlists`,
     { name, public: isPublic, description: `Sorted with TSP algorithm — ${SORT_MODES[SORT_MODE].label}` }
   );
   return res.id;
@@ -298,7 +303,7 @@ async function createPlaylist(userId, name, isPublic) {
 async function addTracks(playlistId, uris) {
   for (let i = 0; i < uris.length; i += 100) {
     await spotifyRequest("post",
-      `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+      `https://api.spotify.com/v1/playlists/${playlistId}/items`,
       { uris: uris.slice(i, i + 100) }
     );
   }
@@ -486,8 +491,7 @@ async function main() {
   console.log(`\n✓ CSV saved: ${csvPath}`);
 
   console.log(`🎵 Creating Spotify playlist: "${playlistName}"...`);
-  const me    = await getMe();
-  const newId = await createPlaylist(me.id, playlistName, NEW_PLAYLIST_PUBLIC);
+  const newId = await createPlaylist(playlistName, NEW_PLAYLIST_PUBLIC);
   await addTracks(newId, sorted.map(t => `spotify:track:${t.spotifyId}`));
 
   console.log(`\n✅ Done!`);
