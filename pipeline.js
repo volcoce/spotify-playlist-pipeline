@@ -229,7 +229,10 @@ async function fetchAllTracks(playlistId) {
   let tracks = [], url = `https://api.spotify.com/v1/playlists/${playlistId}/items?limit=50`;
   while (url) {
     const res = await spotifyRequest("get", url);
-    tracks = tracks.concat(res.items.filter(i => i.track?.id));
+    const page = res.items
+      .map(i => ({ ...i, track: i.track ?? i.item }))  // normalize track/item field rename
+      .filter(i => i.track?.id && !i.is_local);
+    tracks = tracks.concat(page);
     url = res.next;
   }
   return tracks;
