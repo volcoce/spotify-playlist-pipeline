@@ -250,6 +250,46 @@ async function fetchFullTracks(trackIds) {
   return full;
 }
 
+async function fetchReccoBeatsFeatures(trackIds) {
+  const idMap = {};
+  const total = Math.ceil(trackIds.length / 40);
+  let chunk_n = 0;
+
+  for (let i = 0; i < trackIds.length; i += 40) {
+    const chunk = trackIds.slice(i, i + 40);
+    chunk_n++;
+    process.stdout.write(`\r  🎵 ReccoBeats chunk ${chunk_n}/${total}...`);
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await axios.get("https://api.reccobeats.com/v1/audio-features", {
+          params:  { ids: chunk.join(",") },
+          headers: { Accept: "application/json" },
+          timeout: 20_000,
+        });
+        for (const item of (res.data?.content || [])) {
+          const spotifyId = item.href?.split("/").pop();
+          if (spotifyId) idMap[spotifyId] = item;
+        }
+        break;
+      } catch (err) {
+        if (err.response?.status === 429) {
+          const wait = parseInt(err.response?.headers?.["retry-after"] || "2", 10) * 1000;
+          process.stdout.write(`\n  ⏳ ReccoBeats rate limited — waiting ${wait / 1000}s...\n`);
+          await new Promise(r => setTimeout(r, wait));
+        } else {
+          process.stdout.write(`\n  ⚠️  ReccoBeats chunk ${chunk_n} failed: ${err.message}\n`);
+          break;
+        }
+      }
+    }
+
+    if (i + 40 < trackIds.length) await new Promise(r => setTimeout(r, 1000));
+  }
+  process.stdout.write("\n");
+  return trackIds.map(id => idMap[id] || null);
+}
+
 async function fetchAudioFeatures(trackIds) {
   const features = [];
   for (let i = 0; i < trackIds.length; i += 100) {
@@ -403,12 +443,19 @@ async function main() {
   console.log("✓ Full track details loaded");
 
   console.log("🎼 Fetching audio features...");
-  const features = await fetchAudioFeatures(ids);
-  const audioFeaturesAvailable = features.some(f => f !== null);
+  let features = await fetchAudioFeatures(ids);
+  let audioFeaturesAvailable = features.some(f => f !== null);
 
   if (!audioFeaturesAvailable) {
-    console.log("⚠️  Audio features unavailable (deprecated for apps created after Nov 2024).");
-    console.log("   Harmonic/BPM sorting skipped — original track order preserved in CSV.");
+    console.log("⚠️  Spotify audio features unavailable (deprecated for apps after Nov 2024).");
+    console.log("🔄 Falling back to ReccoBeats...");
+    features = await fetchReccoBeatsFeatures(ids);
+    audioFeaturesAvailable = features.some(f => f !== null);
+    if (audioFeaturesAvailable) {
+      console.log("✓ ReccoBeats audio features loaded");
+    } else {
+      console.log("⚠️  ReccoBeats also unavailable — sorting skipped, original order preserved.");
+    }
   } else {
     console.log("✓ Audio features loaded");
   }
