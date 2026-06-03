@@ -445,12 +445,14 @@ async function main() {
   console.log("🎼 Fetching audio features...");
   let features = await fetchAudioFeatures(ids);
   let audioFeaturesAvailable = features.some(f => f !== null);
+  let fromReccoBeats = false;
 
   if (!audioFeaturesAvailable) {
     console.log("⚠️  Spotify audio features unavailable (deprecated for apps after Nov 2024).");
     console.log("🔄 Falling back to ReccoBeats...");
     features = await fetchReccoBeatsFeatures(ids);
     audioFeaturesAvailable = features.some(f => f !== null);
+    fromReccoBeats = audioFeaturesAvailable;
     if (audioFeaturesAvailable) {
       console.log("✓ ReccoBeats audio features loaded");
     } else {
@@ -464,7 +466,7 @@ async function main() {
     endOfFadeIn: 0, startOfFadeOut: null, timeSignature: null, timeSigConfidence: null };
   let analyses = new Array(ids.length).fill(nullAnalysis);
 
-  if (audioFeaturesAvailable) {
+  if (audioFeaturesAvailable && !fromReccoBeats) {
     console.log(`🔬 Fetching audio analysis (${ids.length} tracks)...`);
     analyses = await fetchAllAudioAnalysis(ids);
     console.log("✓ Audio analysis loaded");
